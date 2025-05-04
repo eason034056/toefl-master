@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.6 <4.0.0'
+  sdk: ^3.5.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -32,18 +32,14 @@ dependencies:
     sdk: flutter
   provider: ^6.1.1
   image_picker: ^1.0.7
-  image_picker_ios: ^0.8.9+1
   uuid: ^4.3.3
-  firebase_core: ^2.25.4
-  firebase_storage: ^11.6.5
-  firebase_auth: ^4.17.4
-  http: ^1.1.0  # 用於發送 HTTP 請求
-  cloud_firestore: ^4.15.4
-  flutter_dotenv: ^5.2.1
+  firebase_core: ^2.27.1
+  firebase_storage: ^11.6.10
+  firebase_auth: ^4.17.9
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
@@ -54,7 +50,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^2.0.0
+  flutter_lints: ^4.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -97,7 +93,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-  assets:
-    - .env
-    - assets/images/

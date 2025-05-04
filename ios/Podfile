@@ -1,13 +1,13 @@
-# Uncomment this line to define a global platform for your project
-platform :ios, '15.0'
+# 最乾淨、最安全的 Flutter + Firebase Podfile 範例
+platform :ios, '12.0'
 
-# 設定 Firebase SDK 版本
+# 讓 Flutter plugin 可以正常運作
+use_frameworks!
+
+# 鎖定 Firebase SDK 版本（可依需求調整）
 $FirebaseSDKVersion = '10.25.0'
 
-# 添加這個設定來解決模組化問題
-install! 'cocoapods', :disable_input_output_paths => true
-
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+# 禁用 CocoaPods 統計，讓 flutter build 更快
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -34,8 +34,6 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
-  use_modular_headers!
 
   # 鎖定 Firebase 相關套件版本
   pod 'Firebase/Core', $FirebaseSDKVersion
@@ -48,35 +46,10 @@ target 'Runner' do
   end
 end
 
+# 讓 Flutter 官方自動處理所有 build 設定
 post_install do |installer|
-  # This removes the warning about minimum deployment versions for pods
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      config.build_settings['ENABLE_BITCODE'] = 'NO'
-      
-      # This is for M1 Mac users
-      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-      
-      # This is specifically for BoringSSL-GRPC
-      if target.name == 'BoringSSL-GRPC'
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'OPENSSL_NO_ASM=1'
-        config.build_settings.delete('ARCHS')
-      end
-    end
-  end
-  
-  installer.generated_projects.each do |project|
-    project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      end
-    end
-  end
-  
-  installer.pods_project.build_configurations.each do |config|
-    config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = "arm64"
   end
 end
+
