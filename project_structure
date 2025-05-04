@@ -1,0 +1,18 @@
+lib/
+  ├── main.dart
+  ├── config/
+  │   └── theme.dart
+  ├── models/
+  │   ├── user.dart
+  │   ├── study_plan.dart
+  │   └── vocabulary.dart
+  ├── screens/
+  │   ├── home/
+  │   ├── study/
+  │   ├── vocabulary/
+  │   └── profile/
+  ├── widgets/
+  │   └── common/
+  └── services/
+      ├── auth_service.dart
+      └── ai_service.dart 

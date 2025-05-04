@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "366365763507",
+    "project_id": "toefl-90-days",
+    "storage_bucket": "toefl-90-days.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:366365763507:android:e76915bf51a3fb56d88dc6",
+        "android_client_info": {
+          "package_name": "com.example.toeflMaster"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-sPHSf0e1wFSPnzZ9vgubXt1mAllD1lE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
