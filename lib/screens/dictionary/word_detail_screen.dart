@@ -40,12 +40,14 @@ class _WordDetailScreenState extends State<WordDetailScreen> {
           children: [
             // 圖片區域
             if (widget.word.imageUrl != null)
-              Image.network(
-                widget.word.imageUrl!,
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-              ),
+              LayoutBuilder(builder: (context, constraints) {
+                return Image.network(
+                  widget.word.imageUrl!,
+                  width: constraints.maxWidth,
+                  height: constraints.maxWidth, // 設定高度等於寬度，實現1:1比例
+                  fit: BoxFit.cover,
+                );
+              }),
 
             Padding(
               padding: const EdgeInsets.all(16.0),
