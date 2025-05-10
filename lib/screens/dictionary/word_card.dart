@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:dart_openai/dart_openai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'word_detail_screen.dart';
 import '../../models/word.dart';
 
@@ -28,7 +29,7 @@ class _WordCardState extends State<WordCard> {
   @override
   void initState() {
     super.initState();
-    OpenAI.apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
+    // OpenAI.apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
   }
 
   Future<void> _generateImage() async {
@@ -41,25 +42,27 @@ class _WordCardState extends State<WordCard> {
     });
 
     try {
-      print('Sending request to OpenAI...');
-      final response = await OpenAI.instance.image.create(
-        prompt:
-            '''Create a 1024x1024 px 4-panel comic strip (2x2 layout) in black-and-white Notion style that explains the meaning of the English word '${widget.word.word}' through a simple visual story.
+      print('Sending request to Python backend...');
+      final url = Uri.parse('http://localhost:8000/generate-image');
+      final headers = {
+        'Content-Type': 'application/json',
+      };
+      final body = jsonEncode({
+        "prompt":
+            '''Create a 1024x1024 px 4-panel comic strip (2x2 layout) in black-and-white Notion style that explains the meaning of the English word "${widget.word.word}" through a simple visual story.
 The illustration should use minimalist lines, simple characters, and clean backgrounds.
 Each panel should contain a speech bubble or short caption in English that helps explain the word naturally through context.
 The tone should be clear, light, and slightly humorous, designed to help students understand and remember the word.
 All text must be in English.
 Keep the entire layout clean, focused, and easy to follow.''',
-        model: 'dall-e-3',
-        n: 1,
-        size: OpenAIImageSize.size1024,
-        style: OpenAIImageStyle.natural,
-      );
+        "word": widget.word.word
+      });
 
-      print('Received response from OpenAI: ${response.data.isNotEmpty}');
+      final response = await http.post(url, headers: headers, body: body);
 
-      if (response.data.isNotEmpty) {
-        final imageUrl = response.data.first.url;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final imageUrl = data['image_url'];
         print('Generated image URL: $imageUrl');
 
         final updatedWord = widget.word.copyWith(
@@ -78,6 +81,8 @@ Keep the entire layout clean, focused, and easy to follow.''',
           print('Error updating word in Firestore: $e');
           throw Exception('Failed to update word in Firestore: $e');
         }
+      } else {
+        throw Exception('Failed to generate image: ${response.statusCode}');
       }
     } catch (e) {
       print('Error in _generateImage: $e');
