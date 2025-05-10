@@ -49,3 +49,4 @@ ios/GoogleService-Info.plist
 
 # Environment variables
 .env
+backend/.env
