@@ -9,6 +9,7 @@ import firebase_admin
 from firebase_admin import credentials, storage
 import tempfile
 from datetime import datetime
+import json
 
 # 載入環境變數
 load_dotenv()
@@ -21,8 +22,23 @@ if not api_key:
 else:
     print("API 金鑰已成功載入")
 
+# 從環境變數建立 Firebase 認證資訊
+firebase_credentials = {
+    "type": os.getenv("FIREBASE_TYPE"),
+    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace("\\n", "\n"),
+    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
+    "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+    "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+    "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_X509_CERT_URL"),
+    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL"),
+    "universe_domain": os.getenv("FIREBASE_UNIVERSE_DOMAIN")
+}
+
 # 初始化 Firebase
-cred = credentials.Certificate("firebase-credentials.json")
+cred = credentials.Certificate(firebase_credentials)
 firebase_admin.initialize_app(cred, {
     'storageBucket': 'toefl-90-days.firebasestorage.app'  # 使用你的 Firebase 專案 ID
 })
@@ -39,7 +55,7 @@ except Exception as e:
     print("請確認：")
     print("1. Firebase Console 中已啟用 Storage")
     print("2. 專案 ID 是否正確")
-    print("3. firebase-credentials.json 是否正確")
+    print("3. .env 檔案中的 Firebase 認證資訊是否正確")
     print("4. 是否已在 Firebase Console 中建立 Storage bucket")
 
 app = FastAPI()
