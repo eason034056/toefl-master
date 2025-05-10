@@ -46,6 +46,7 @@ app.*.map.json
 # Firebase secrets
 android/app/google-services.json
 ios/GoogleService-Info.plist
+**/firebase-credentials.json
 
 # Environment variables
 .env
