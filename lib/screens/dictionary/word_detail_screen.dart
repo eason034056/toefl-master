@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/word.dart';
 
-class WordDetailScreen extends StatelessWidget {
+class WordDetailScreen extends StatefulWidget {
   final Word word;
 
   const WordDetailScreen({
@@ -10,10 +10,23 @@ class WordDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<WordDetailScreen> createState() => _WordDetailScreenState();
+}
+
+class _WordDetailScreenState extends State<WordDetailScreen> {
+  late bool isFavorite;
+
+  @override
+  void initState() {
+    super.initState();
+    isFavorite = widget.word.isFavorite; // 一開始用 Word 的收藏狀態
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(word.word),
+        title: Text(widget.word.word),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -26,9 +39,9 @@ class WordDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 圖片區域
-            if (word.imageUrl != null)
+            if (widget.word.imageUrl != null)
               Image.network(
-                word.imageUrl!,
+                widget.word.imageUrl!,
                 width: double.infinity,
                 height: 200,
                 fit: BoxFit.cover,
@@ -40,17 +53,39 @@ class WordDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 單字和音標
-                  Text(
-                    word.word,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        widget.word.word,
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          isFavorite ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 32,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            isFavorite = !isFavorite; // 切換狀態
+                            if (!isFavorite) {
+                              // 用 copyWith 產生新的 Word 物件
+                              final updatedWord = widget.word.copyWith(isFavorite: false);
+                              Navigator.pop(context, updatedWord); // 把新物件傳回去
+                            }
+                          });
+                        },
+                      ),
+                    ],
                   ),
                   Row(
                     children: [
                       Text(
-                        word.phonetic,
+                        widget.word.phonetic,
                         style: TextStyle(
                           fontSize: 18,
                           color: Colors.grey[600],
@@ -68,7 +103,7 @@ class WordDetailScreen extends StatelessWidget {
                   const SizedBox(height: 24),
 
                   // 所有詞性與解釋
-                  ...word.meanings.map((meaning) => Padding(
+                  ...widget.word.meanings.map((meaning) => Padding(
                         padding: const EdgeInsets.only(bottom: 24.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

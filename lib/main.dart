@@ -5,8 +5,10 @@ import '/config/theme.dart';
 import '/screens/home/home_screen.dart';
 import '/providers/check_in_provider.dart';
 import '/services/storage_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
+  await dotenv.load(fileName: ".env");
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();

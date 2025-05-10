@@ -3,6 +3,7 @@ import 'stats_card.dart';
 import 'word_card.dart';
 import '../../models/word.dart';
 import '../../services/spaced_review_service.dart';
+import '../../services/word_service.dart';
 import 'word_list_screen.dart';
 import 'dart:math';
 
@@ -19,6 +20,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   late List<Word> _todayLearnedWords;
   final double _swipeThreshold = 100.0;
   double _dragOffset = 0.0;
+  final WordService _wordService = WordService();
 
   @override
   void initState() {
@@ -29,7 +31,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   }
 
   List<Word> _getDemoWords() {
-    return [
+    final allWords = [
       Word(
         id: '1',
         word: 'chic',
@@ -54,7 +56,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         reviewCount: 0,
         masteryLevel: 0.0,
         learningStage: 0,
-        isFavorite: false,
+        isFavorite: true,
       ),
       Word(
         id: '2',
@@ -74,7 +76,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         reviewCount: 0,
         masteryLevel: 0.0,
         learningStage: 0,
-        isFavorite: false,
+        isFavorite: true,
       ),
       Word(
         id: '3',
@@ -94,7 +96,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         reviewCount: 0,
         masteryLevel: 0.0,
         learningStage: 0,
-        isFavorite: false,
+        isFavorite: true,
       ),
       Word(
         id: '4',
@@ -114,7 +116,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         reviewCount: 0,
         masteryLevel: 0.0,
         learningStage: 0,
-        isFavorite: false,
+        isFavorite: true,
       ),
       Word(
         id: '5',
@@ -134,9 +136,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         reviewCount: 0,
         masteryLevel: 0.0,
         learningStage: 0,
-        isFavorite: false,
+        isFavorite: true,
       ),
     ];
+    // 只留下有收藏的單字
+    return allWords.where((word) => word.isFavorite).toList();
   }
 
   void _onSwipe(DragEndDetails details, Word word) {
@@ -205,13 +209,20 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final result = await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => WordListScreen(words: _words),
                           ),
                         );
+                        if (result == true) {
+                          setState(() {
+                            _words = _getDemoWords();
+                            _todayReviewWords = _words.where((word) => SpacedReviewService.shouldReviewToday(word)).toList();
+                            print(_words);
+                          });
+                        }
                       },
                       child: StatsCard(
                         title: "Total",
@@ -301,11 +312,59 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                   opacity: i == _todayReviewWords.length - 1 ? 1.0 : 1 - (_todayReviewWords.length - 1 - i) * 0.2,
                                   child: Transform.translate(
                                     offset: i == _todayReviewWords.length - 1 ? Offset(_dragOffset, 0) : Offset.zero,
-                                    child: WordCard(
-                                      word: _todayReviewWords[i],
-                                      dragOffset: i == _todayReviewWords.length - 1 ? _dragOffset : null,
-                                      swipeThreshold: _swipeThreshold,
-                                    ),
+                                    child: i == _todayReviewWords.length - 1
+                                        ? GestureDetector(
+                                            onHorizontalDragStart: (details) {
+                                              setState(() {
+                                                _dragOffset = 0.0;
+                                              });
+                                            },
+                                            onHorizontalDragUpdate: (details) {
+                                              setState(() {
+                                                _dragOffset += details.delta.dx;
+                                              });
+                                            },
+                                            onHorizontalDragEnd: (details) {
+                                              _onSwipe(details, _todayReviewWords[i]);
+                                              setState(() {
+                                                _dragOffset = 0.0;
+                                              });
+                                            },
+                                            child: WordCard(
+                                              word: _todayReviewWords[i],
+                                              dragOffset: _dragOffset,
+                                              swipeThreshold: _swipeThreshold,
+                                              onWordUpdated: (updatedWord) async {
+                                                try {
+                                                  await _wordService.updateWord(updatedWord);
+                                                  setState(() {
+                                                    _todayReviewWords[i] = updatedWord;
+                                                  });
+                                                } catch (e) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text('Error updating word: $e')),
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          )
+                                        : WordCard(
+                                            word: _todayReviewWords[i],
+                                            dragOffset: null,
+                                            swipeThreshold: _swipeThreshold,
+                                            onWordUpdated: (updatedWord) async {
+                                              try {
+                                                await _wordService.updateWord(updatedWord);
+                                                setState(() {
+                                                  _todayReviewWords[i] = updatedWord;
+                                                });
+                                              } catch (e) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text('Error updating word: $e')),
+                                                );
+                                              }
+                                            },
+                                          ),
                                   ),
                                 ),
                               ),
