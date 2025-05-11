@@ -21,6 +21,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   final double _swipeThreshold = 100.0;
   double _dragOffset = 0.0;
   final WordService _wordService = WordService();
+  bool _isGeneratingImage = false;
 
   @override
   void initState() {
@@ -144,6 +145,8 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   }
 
   void _onSwipe(DragEndDetails details, Word word) {
+    if (_isGeneratingImage) return;
+
     if (details.primaryVelocity == null) return;
 
     if (details.primaryVelocity! > _swipeThreshold) {
@@ -285,11 +288,13 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                           top: (i - (_todayReviewWords.length - 3)) * 20.0,
                           child: GestureDetector(
                             onHorizontalDragStart: (details) {
+                              if (_isGeneratingImage) return;
                               setState(() {
                                 _dragOffset = 0.0;
                               });
                             },
                             onHorizontalDragUpdate: (details) {
+                              if (_isGeneratingImage) return;
                               if (i == _todayReviewWords.length - 1) {
                                 setState(() {
                                   _dragOffset += details.delta.dx;
@@ -297,6 +302,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                               }
                             },
                             onHorizontalDragEnd: (details) {
+                              if (_isGeneratingImage) return;
                               if (i == _todayReviewWords.length - 1) {
                                 _onSwipe(details, _todayReviewWords[i]);
                                 setState(() {
@@ -315,16 +321,19 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                     child: i == _todayReviewWords.length - 1
                                         ? GestureDetector(
                                             onHorizontalDragStart: (details) {
+                                              if (_isGeneratingImage) return;
                                               setState(() {
                                                 _dragOffset = 0.0;
                                               });
                                             },
                                             onHorizontalDragUpdate: (details) {
+                                              if (_isGeneratingImage) return;
                                               setState(() {
                                                 _dragOffset += details.delta.dx;
                                               });
                                             },
                                             onHorizontalDragEnd: (details) {
+                                              if (_isGeneratingImage) return;
                                               _onSwipe(details, _todayReviewWords[i]);
                                               setState(() {
                                                 _dragOffset = 0.0;
@@ -346,6 +355,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                                   );
                                                 }
                                               },
+                                              onGeneratingChanged: (isGenerating) {
+                                                setState(() {
+                                                  _isGeneratingImage = isGenerating;
+                                                });
+                                              },
                                             ),
                                           )
                                         : WordCard(
@@ -363,6 +377,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                                   SnackBar(content: Text('Error updating word: $e')),
                                                 );
                                               }
+                                            },
+                                            onGeneratingChanged: (isGenerating) {
+                                              setState(() {
+                                                _isGeneratingImage = isGenerating;
+                                              });
                                             },
                                           ),
                                   ),

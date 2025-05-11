@@ -74,7 +74,6 @@ class HomeTab extends StatelessWidget {
         children: [
           const UserHeader(),
           const CheckInSection(),
-          const ChallengeCalendar(),
           const ActivityWall(),
         ],
       ),
@@ -146,8 +145,15 @@ class UserHeader extends StatelessWidget {
   }
 }
 
-class CheckInSection extends StatelessWidget {
+class CheckInSection extends StatefulWidget {
   const CheckInSection({super.key});
+
+  @override
+  State<CheckInSection> createState() => _CheckInSectionState();
+}
+
+class _CheckInSectionState extends State<CheckInSection> {
+  bool _showChallengeProgress = false;
 
   @override
   Widget build(BuildContext context) {
@@ -168,25 +174,35 @@ class CheckInSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Check In',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (streakCount > 0)
-                    Text(
-                      '🔥 $streakCount days',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+              // 點擊整個標題區域可以切換顯示
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showChallengeProgress = !_showChallengeProgress;
+                  });
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Check In',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                ],
+                    if (streakCount > 0)
+                      Text(
+                        '🔥 $streakCount days',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -209,6 +225,11 @@ class CheckInSection extends StatelessWidget {
                 ),
                 child: Text(hasCheckedIn ? 'CHECKED IN' : 'CHECK IN'),
               ),
+              // 根據狀態顯示或隱藏 Challenge Progress
+              if (_showChallengeProgress) ...[
+                const SizedBox(height: 16),
+                const ChallengeCalendar(),
+              ],
             ],
           ),
         );
@@ -290,7 +311,6 @@ class _ChallengeCalendarState extends State<ChallengeCalendar> {
         final totalCells = (totalDays / 7).ceil() * 7;
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -298,7 +318,7 @@ class _ChallengeCalendarState extends State<ChallengeCalendar> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Challenge Progress',
+                    'Progress',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

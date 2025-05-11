@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_storage/firebase_storage.dart';
 import 'word_detail_screen.dart';
 import '../../models/word.dart';
 
@@ -10,6 +11,7 @@ class WordCard extends StatefulWidget {
   final double? dragOffset;
   final double swipeThreshold;
   final Function(Word) onWordUpdated;
+  final Function(bool)? onGeneratingChanged;
 
   const WordCard({
     super.key,
@@ -17,6 +19,7 @@ class WordCard extends StatefulWidget {
     this.dragOffset,
     this.swipeThreshold = 100.0,
     required this.onWordUpdated,
+    this.onGeneratingChanged,
   });
 
   @override
@@ -32,6 +35,30 @@ class _WordCardState extends State<WordCard> {
     // OpenAI.apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
   }
 
+  Future<String?> _checkExistingImage() async {
+    try {
+      final storage = FirebaseStorage.instance;
+      final wordImagesRef = storage.ref().child('word_images');
+
+      // 列出所有以該單字開頭的圖片
+      final result = await wordImagesRef.listAll();
+
+      // 尋找以該單字開頭的圖片
+      for (var item in result.items) {
+        if (item.name.startsWith('${widget.word.word}_')) {
+          // 找到圖片，返回下載 URL
+          return await item.getDownloadURL();
+        }
+      }
+
+      // 沒有找到圖片
+      return null;
+    } catch (e) {
+      print('Error checking existing image: $e');
+      return null;
+    }
+  }
+
   Future<void> _generateImage() async {
     if (_isGenerating) return;
 
@@ -41,15 +68,39 @@ class _WordCardState extends State<WordCard> {
       _isGenerating = true;
     });
 
+    // 通知父組件正在生成圖片
+    widget.onGeneratingChanged?.call(true);
+
     try {
-      print('Sending request to Python backend...');
+      // 先檢查是否已有圖片
+      final existingImageUrl = await _checkExistingImage();
+      if (existingImageUrl != null) {
+        print('Found existing image: $existingImageUrl');
+
+        final updatedWord = widget.word.copyWith(
+          imageUrl: existingImageUrl,
+          updatedAt: DateTime.now(),
+        );
+
+        try {
+          await widget.onWordUpdated(updatedWord);
+          print('Word updated successfully with existing image');
+          return;
+        } catch (e) {
+          print('Error updating word with existing image: $e');
+          throw Exception('Failed to update word with existing image: $e');
+        }
+      }
+
+      // 如果沒有現有圖片，則生成新圖片
+      print('No existing image found, generating new image...');
       final url = Uri.parse('http://localhost:8000/generate-image');
       final headers = {
         'Content-Type': 'application/json',
       };
       final body = jsonEncode({
         "prompt":
-            '''Create a 1024x1024 px 4-panel comic strip (2x2 layout) in black-and-white Notion style that explains the meaning of the English word "${widget.word.word}" through a simple visual story.
+            '''Create a aspect ratio 1:1 4-panel comic strip (2x2 layout) in black-and-white Notion style that explains the meaning of the English word "${widget.word.word}" through a simple visual story.
 The illustration should use minimalist lines, simple characters, and clean backgrounds.
 Each panel should contain a speech bubble or short caption in English that helps explain the word naturally through context.
 The tone should be clear, light, and slightly humorous, designed to help students understand and remember the word.
@@ -97,6 +148,8 @@ Keep the entire layout clean, focused, and easy to follow.''',
       setState(() {
         _isGenerating = false;
       });
+      // 通知父組件圖片生成完成
+      widget.onGeneratingChanged?.call(false);
     }
   }
 
