@@ -155,86 +155,16 @@ class CheckInSection extends StatefulWidget {
 class _CheckInSectionState extends State<CheckInSection> {
   bool _showChallengeProgress = false;
 
-  @override
-  Widget build(BuildContext context) {
-    // 監聽打卡狀態
-    return Consumer<CheckInProvider>(
-      builder: (context, checkInProvider, child) {
-        final hasCheckedIn = checkInProvider.isTodayCheckedIn;
-        final streakCount = checkInProvider.status.streakCount;
-
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.black12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 點擊整個標題區域可以切換顯示
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showChallengeProgress = !_showChallengeProgress;
-                  });
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Check In',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    if (streakCount > 0)
-                      Text(
-                        '🔥 $streakCount days',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hasCheckedIn ? 'Great job! You\'ve completed today\'s practice!' : 'Complete today\'s practice to continue the streak!',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: hasCheckedIn ? null : () => _showImageSourceDialog(context, checkInProvider),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 45),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(hasCheckedIn ? 'CHECKED IN' : 'CHECK IN'),
-              ),
-              // 根據狀態顯示或隱藏 Challenge Progress
-              if (_showChallengeProgress) ...[
-                const SizedBox(height: 16),
-                const ChallengeCalendar(),
-              ],
-            ],
-          ),
-        );
-      },
-    );
+  // 取得本週的打卡狀態（週一到週日）
+  List<bool> _getWeeklyCheckInStatus(List<DateTime> checkedInDates) {
+    final now = DateTime.now();
+    final int todayWeekday = now.weekday;
+    // 取得本週一的日期
+    final monday = now.subtract(Duration(days: todayWeekday - 1));
+    // 產生本週一到週日的日期（7天）
+    List<DateTime> weekDays = List.generate(7, (i) => monday.add(Duration(days: i)));
+    // 檢查每一天有沒有在 checkedInDates 裡
+    return weekDays.map((d) => checkedInDates.any((c) => c.year == d.year && c.month == d.month && c.day == d.day)).toList();
   }
 
   void _showImageSourceDialog(BuildContext context, CheckInProvider provider) {
@@ -264,6 +194,163 @@ class _CheckInSectionState extends State<CheckInSection> {
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<CheckInProvider>(
+      builder: (context, checkInProvider, child) {
+        final hasCheckedIn = checkInProvider.isTodayCheckedIn;
+        final streakCount = checkInProvider.status.streakCount;
+        final checkedInDates = checkInProvider.status.checkedInDates;
+        final int totalGoal = 90; // 目標天數
+        final int currentProgress = streakCount; // 目前進度
+        final weeklyStatus = _getWeeklyCheckInStatus(checkedInDates);
+
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _showChallengeProgress = !_showChallengeProgress;
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.black12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // 左側火焰和 Streak 數字
+                    Column(
+                      children: [
+                        // 火焰動畫
+                        Image.asset(
+                          'assets/images/fire.gif',
+                          width: 60,
+                          height: 60,
+                        ),
+                        const SizedBox(height: 4),
+                        // Streak 數字
+                        Text(
+                          '$streakCount',
+                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                        ),
+                        const Text('Streak', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(width: 24),
+                    // 右側進度條和本週狀態
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 進度數字
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline, // 讓文字對齊底部
+                            textBaseline: TextBaseline.alphabetic, // 指定以字母基線作為對齊參考點
+                            children: [
+                              Text(
+                                '$currentProgress ',
+                                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                              ),
+                              Text('/ $totalGoal', style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          // 進度條
+                          ClipRRect(
+                            // 用 ClipRRect 包住進度條來製造圓角效果
+                            borderRadius: BorderRadius.circular(5), // 設定 5 像素的圓角
+                            child: LinearProgressIndicator(
+                              value: currentProgress / totalGoal,
+                              minHeight: 10,
+                              backgroundColor: Colors.grey[200],
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // 星期一到週日的打卡狀態
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(7, (i) {
+                              // 每個星期的文字和打卡勾勾組合在一起
+                              return Column(
+                                children: [
+                                  // 星期文字
+                                  Text(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i], style: const TextStyle(fontSize: 14)),
+                                  const SizedBox(height: 4),
+                                  // 打卡勾勾
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      // 圓形外框
+                                      shape: BoxShape.circle,
+                                      // 如果已打卡就是黑色背景，否則是白色背景
+                                      color: Colors.white,
+                                      // 灰色邊框
+                                      border: Border.all(
+                                        color: weeklyStatus[i] ? Colors.black : Colors.grey[300]!,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: weeklyStatus[i]
+                                        // 已打卡顯示白色勾勾
+                                        ? const Icon(Icons.check, color: Colors.black, size: 20)
+                                        // 未打卡就空白
+                                        : null,
+                                  ),
+                                ],
+                              );
+                            }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                // 展開 Challenge Progress
+                if (_showChallengeProgress) ...[
+                  const SizedBox(height: 16),
+                  const ChallengeCalendar(),
+                ],
+
+                if (!_showChallengeProgress) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: hasCheckedIn
+                        ? null // 已打卡就不能按
+                        : () => _showImageSourceDialog(context, checkInProvider), // 沒打卡就打開選擇照片
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 45), // 按鈕寬度撐滿
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: Text(hasCheckedIn ? '已打卡' : '打卡'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
