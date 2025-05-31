@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'stats_card.dart';
 import 'word_card.dart';
 import '../../models/word.dart';
+import '../../models/word_collection.dart';
 import '../../services/spaced_review_service.dart';
 import '../../services/word_service.dart';
 import 'word_list_screen.dart';
+import 'collection_list_screen.dart';
 import 'dart:math';
+import '../../models/user.dart';
+import '../../services/user_service.dart';
+import '../../providers/user_provider.dart';
+import '../../data/mock_data.dart';
 
 class DictionaryScreen extends StatefulWidget {
   const DictionaryScreen({super.key});
@@ -15,133 +22,151 @@ class DictionaryScreen extends StatefulWidget {
 }
 
 class _DictionaryScreenState extends State<DictionaryScreen> {
-  late List<Word> _words;
-  late List<Word> _todayReviewWords;
-  late List<Word> _todayLearnedWords;
+  List<Word> _words = [];
+  List<Word> _todayReviewWords = [];
+  List<Word> _todayLearnedWords = [];
+  List<WordCollection> _systemCollections = []; // 系統提供的單字集
   final double _swipeThreshold = 100.0;
   double _dragOffset = 0.0;
   final WordService _wordService = WordService();
+  final UserService _userService = UserService();
   bool _isGeneratingImage = false;
+  int _dailyNewWords = 5;
 
   @override
   void initState() {
     super.initState();
-    _words = _getDemoWords();
-    _todayReviewWords = _words.where((word) => SpacedReviewService.shouldReviewToday(word)).toList();
-    _todayLearnedWords = [];
+    _systemCollections = systemCollections; // 使用假資料中的系統單字集
+    _loadUserData();
   }
 
-  List<Word> _getDemoWords() {
-    final allWords = [
-      Word(
-        id: '1',
-        word: 'chic',
-        phonetic: '/ʃiːk/',
-        audioUrl: 'https://example.com/audio/chic.mp3',
-        meanings: [
-          WordMeaning(
-            partOfSpeech: 'adj.',
-            definition: '時髦的；有格調的',
-            example: 'She always looks chic in black.',
-            exampleTranslation: '她穿黑色總是看起來很時髦。',
+  Future<void> _loadUserData() async {
+    // 用 Provider 取得目前用戶 ID
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.user;
+    if (user == null) return;
+
+    setState(() {
+      // 合併系統單字集和用戶收藏的單字集
+      final allCollections = [..._systemCollections, ...user.savedCollections];
+      _words = _getAllWordsFromCollections(allCollections);
+      _updateTodayReviewWords();
+      _todayLearnedWords = [];
+    });
+  }
+
+  List<Word> _getAllWordsFromCollections(List<WordCollection> collections) {
+    final Set<String> seenWordIds = {};
+    final List<Word> allWords = [];
+
+    for (final collection in collections) {
+      for (final word in collection.words) {
+        if (!seenWordIds.contains(word.id)) {
+          seenWordIds.add(word.id);
+          allWords.add(word);
+        }
+      }
+    }
+
+    return allWords;
+  }
+
+  void _updateTodayReviewWords() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.user;
+    if (user == null) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 從所有單字中找出今天需要複習的單字
+    _todayReviewWords = _words.where((word) {
+      final progress = user.wordProgress[word.id];
+      if (progress == null) return false;
+
+      final nextReview = progress.nextReviewDate;
+      if (nextReview == null) return false;
+
+      final reviewDate = DateTime(
+        nextReview.year,
+        nextReview.month,
+        nextReview.day,
+      );
+
+      return reviewDate.isAtSameMomentAs(today);
+    }).toList();
+
+    // 根據複習優先級排序
+    _todayReviewWords.sort((a, b) {
+      final progressA = user.wordProgress[a.id];
+      final progressB = user.wordProgress[b.id];
+      if (progressA == null || progressB == null) return 0;
+
+      return SpacedReviewService.calculateReviewPriority(progressB).compareTo(SpacedReviewService.calculateReviewPriority(progressA));
+    });
+  }
+
+  // 新增設定每日新單字數量的方法
+  void _showDailyNewWordsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('設定每日新單字數量'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('目前設定：$_dailyNewWords 個單字/天'),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.remove),
+                  onPressed: () {
+                    if (_dailyNewWords > 1) {
+                      setState(() {
+                        _dailyNewWords--;
+                      });
+                    }
+                  },
+                ),
+                Text(
+                  '$_dailyNewWords',
+                  style: const TextStyle(fontSize: 20),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () {
+                    setState(() {
+                      _dailyNewWords++;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('取消'),
           ),
-          WordMeaning(
-            partOfSpeech: 'n.',
-            definition: '別致的人；時髦的人',
-            example: 'The chic of Paris.',
-            exampleTranslation: '巴黎的時尚人士。',
+          TextButton(
+            onPressed: () {
+              // 更新單字的複習時間
+              setState(() {
+                _words = _getAllWordsFromCollections(_systemCollections);
+                _updateTodayReviewWords();
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('確定'),
           ),
         ],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        reviewCount: 0,
-        masteryLevel: 0.0,
-        learningStage: 0,
-        isFavorite: true,
       ),
-      Word(
-        id: '2',
-        word: 'ephemeral',
-        phonetic: '/ɪˈfem(ə)rəl/',
-        audioUrl: 'https://example.com/audio/ephemeral.mp3',
-        meanings: [
-          WordMeaning(
-            partOfSpeech: 'adj.',
-            definition: '短暫的；瞬息的',
-            example: 'Ephemeral pleasures of life',
-            exampleTranslation: '生命中轉瞬即逝的快樂',
-          ),
-        ],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        reviewCount: 0,
-        masteryLevel: 0.0,
-        learningStage: 0,
-        isFavorite: true,
-      ),
-      Word(
-        id: '3',
-        word: 'serendipity',
-        phonetic: '/ˌserənˈdɪpəti/',
-        audioUrl: 'https://example.com/audio/serendipity.mp3',
-        meanings: [
-          WordMeaning(
-            partOfSpeech: 'n.',
-            definition: '意外發現美好事物的能力；幸運',
-            example: 'Finding this book was pure serendipity.',
-            exampleTranslation: '找到這本書純屬幸運。',
-          ),
-        ],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        reviewCount: 0,
-        masteryLevel: 0.0,
-        learningStage: 0,
-        isFavorite: true,
-      ),
-      Word(
-        id: '4',
-        word: 'ubiquitous',
-        phonetic: '/juːˈbɪkwɪtəs/',
-        audioUrl: 'https://example.com/audio/ubiquitous.mp3',
-        meanings: [
-          WordMeaning(
-            partOfSpeech: 'adj.',
-            definition: '無所不在的；普遍存在的',
-            example: 'Mobile phones are ubiquitous in modern life.',
-            exampleTranslation: '手機在現代生活中無處不在。',
-          ),
-        ],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        reviewCount: 0,
-        masteryLevel: 0.0,
-        learningStage: 0,
-        isFavorite: true,
-      ),
-      Word(
-        id: '5',
-        word: 'mellifluous',
-        phonetic: '/məˈlɪfluəs/',
-        audioUrl: 'https://example.com/audio/mellifluous.mp3',
-        meanings: [
-          WordMeaning(
-            partOfSpeech: 'adj.',
-            definition: '(聲音)甜美的；悅耳的',
-            example: 'Her mellifluous voice was perfect for radio.',
-            exampleTranslation: '她甜美的聲音非常適合做廣播。',
-          ),
-        ],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        reviewCount: 0,
-        masteryLevel: 0.0,
-        learningStage: 0,
-        isFavorite: true,
-      ),
-    ];
-    // 只留下有收藏的單字
-    return allWords.where((word) => word.isFavorite).toList();
+    );
   }
 
   void _onSwipe(DragEndDetails details, Word word) {
@@ -154,10 +179,27 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       setState(() {
         final wordIndex = _words.indexWhere((w) => w.id == word.id);
         if (wordIndex != -1) {
-          final updatedWord = SpacedReviewService.updateWordAfterReview(
-            word: word,
+          final userId = Provider.of<UserProvider>(context, listen: false).user?.id ?? 'current_user_id';
+          final progress = UserWordProgress(
+            wordId: word.id,
+            userId: userId,
+            learningStage: 0,
+            masteryLevel: 0.0,
+            reviewCount: 0,
+            lastReviewDate: DateTime.now(),
+            nextReviewDate: DateTime.now(),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          final updatedProgress = SpacedReviewService.updateWordAfterReview(
+            word: progress,
             isCorrect: true,
           );
+          // 更新單字資訊
+          final updatedWord = word.copyWith(
+              // 這裡需要根據 UserWordProgress 的資訊更新 Word
+              // 暫時保持原樣，因為 Word 類別目前沒有學習進度相關的欄位
+              );
           _words[wordIndex] = updatedWord;
           if (!_todayLearnedWords.any((w) => w.id == updatedWord.id)) {
             _todayLearnedWords.add(updatedWord);
@@ -174,8 +216,84 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
   }
 
+  void _onWordUpdated(Word updatedWord) {
+    setState(() {
+      // 更新單字列表中的單字
+      final wordIndex = _words.indexWhere((w) => w.id == updatedWord.id);
+      if (wordIndex != -1) {
+        _words[wordIndex] = updatedWord;
+      }
+
+      // 更新單字集中的單字
+      for (var i = 0; i < _systemCollections.length; i++) {
+        final collection = _systemCollections[i];
+        final wordIndex = collection.words.indexWhere((w) => w.id == updatedWord.id);
+        if (wordIndex != -1) {
+          final updatedWords = List<Word>.from(collection.words);
+          updatedWords[wordIndex] = updatedWord;
+          _systemCollections[i] = collection.copyWith(words: updatedWords);
+        }
+      }
+
+      // 更新今日複習單字
+      _updateTodayReviewWords();
+    });
+  }
+
+  void _onCollectionsUpdated(List<WordCollection> updatedCollections) async {
+    print('=== Collection Update Callback in DictionaryScreen ===');
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.user;
+    if (user == null) {
+      print('Error: User is null when updating collections');
+      return;
+    }
+
+    try {
+      print('Current user collections: ${user.savedCollections.length}');
+      print('Updated collections: ${updatedCollections.length}');
+
+      // 更新用戶收藏的單字集
+      await _userService.updateSavedCollections(user.id, updatedCollections);
+
+      setState(() {
+        // 更新 Provider 中的用戶數據
+        final updatedUser = user.copyWith(
+          savedCollections: updatedCollections,
+        );
+        userProvider.updateUser(updatedUser);
+
+        // 重新計算所有單字
+        _words = _getAllWordsFromCollections([..._systemCollections, ...updatedCollections]);
+        _updateTodayReviewWords();
+
+        print('Updated total words: ${_words.length}');
+        print('Updated today review words: ${_todayReviewWords.length}');
+      });
+    } catch (e) {
+      print('Error updating collections: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating collections: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final user = userProvider.user;
+
+    // 計算用戶收藏的單字總數，保持原有順序
+    final totalSavedWords = user?.savedCollections.fold<int>(
+          0,
+          (sum, collection) => sum + collection.words.length,
+        ) ??
+        0;
+
+    print('=== Building DictionaryScreen ===');
+    print('User saved collections: ${user?.savedCollections.length ?? 0}');
+    print('Total saved words: $totalSavedWords');
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -184,7 +302,6 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 頂部標題和按鈕保持不變...
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -198,11 +315,46 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: () {
-                      // 新增單字功能
-                    },
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.settings),
+                        onPressed: _showDailyNewWordsDialog,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () {
+                          print('=== Opening System Collections ===');
+                          // 顯示所有系統提供的單字集
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CollectionListScreen(
+                                collections: _systemCollections,
+                                onCollectionsUpdated: (updatedCollections) {
+                                  print('=== Collection Update Callback ===');
+                                  print('Updated collections count: ${updatedCollections.length}');
+                                  // 更新用戶收藏的單字集
+                                  setState(() {
+                                    if (user != null) {
+                                      print('Updating user with new collections');
+                                      final updatedUser = user.copyWith(
+                                        savedCollections: updatedCollections,
+                                      );
+                                      userProvider.updateUser(updatedUser);
+                                      print('User updated with ${updatedCollections.length} collections');
+                                    } else {
+                                      print('Error: User is null when updating collections');
+                                    }
+                                  });
+                                },
+                                isSystemCollection: true,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -212,24 +364,31 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => WordListScreen(words: _words),
-                          ),
-                        );
-                        if (result == true) {
-                          setState(() {
-                            _words = _getDemoWords();
-                            _todayReviewWords = _words.where((word) => SpacedReviewService.shouldReviewToday(word)).toList();
-                            print(_words);
-                          });
+                      onTap: () {
+                        // 顯示用戶收藏的單字集
+                        if (user != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CollectionListScreen(
+                                collections: user.savedCollections,
+                                onCollectionsUpdated: (updatedCollections) {
+                                  setState(() {
+                                    final updatedUser = user.copyWith(
+                                      savedCollections: updatedCollections,
+                                    );
+                                    userProvider.updateUser(updatedUser);
+                                  });
+                                },
+                                isSystemCollection: false,
+                              ),
+                            ),
+                          );
                         }
                       },
                       child: StatsCard(
-                        title: "Total",
-                        count: _words.length,
+                        title: "Collections",
+                        count: totalSavedWords,
                       ),
                     ),
                   ),
@@ -242,6 +401,9 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                           MaterialPageRoute(
                             builder: (context) => WordListScreen(
                               words: _todayReviewWords,
+                              collections: _systemCollections,
+                              onWordUpdated: _onWordUpdated,
+                              onCollectionsUpdated: _onCollectionsUpdated,
                               title: 'Today\'s Review',
                             ),
                           ),
@@ -262,6 +424,9 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                           MaterialPageRoute(
                             builder: (context) => WordListScreen(
                               words: _todayLearnedWords,
+                              collections: _systemCollections,
+                              onWordUpdated: _onWordUpdated,
+                              onCollectionsUpdated: _onCollectionsUpdated,
                               title: 'Today\'s Learned',
                             ),
                           ),
@@ -343,6 +508,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                               word: _todayReviewWords[i],
                                               dragOffset: _dragOffset,
                                               swipeThreshold: _swipeThreshold,
+                                              collections: _systemCollections,
                                               onWordUpdated: (updatedWord) async {
                                                 try {
                                                   await _wordService.updateWord(updatedWord);
@@ -355,6 +521,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                                   );
                                                 }
                                               },
+                                              onCollectionsUpdated: _onCollectionsUpdated,
                                               onGeneratingChanged: (isGenerating) {
                                                 setState(() {
                                                   _isGeneratingImage = isGenerating;
@@ -366,6 +533,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                             word: _todayReviewWords[i],
                                             dragOffset: null,
                                             swipeThreshold: _swipeThreshold,
+                                            collections: _systemCollections,
                                             onWordUpdated: (updatedWord) async {
                                               try {
                                                 await _wordService.updateWord(updatedWord);
@@ -378,6 +546,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                                 );
                                               }
                                             },
+                                            onCollectionsUpdated: _onCollectionsUpdated,
                                             onGeneratingChanged: (isGenerating) {
                                               setState(() {
                                                 _isGeneratingImage = isGenerating;

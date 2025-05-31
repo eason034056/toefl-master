@@ -5,20 +5,25 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'word_detail_screen.dart';
 import '../../models/word.dart';
+import '../../models/word_collection.dart';
 
 class WordCard extends StatefulWidget {
   final Word word;
   final double? dragOffset;
   final double swipeThreshold;
+  final List<WordCollection> collections;
   final Function(Word) onWordUpdated;
+  final Function(List<WordCollection>) onCollectionsUpdated;
   final Function(bool)? onGeneratingChanged;
 
   const WordCard({
     super.key,
     required this.word,
+    required this.collections,
     this.dragOffset,
     this.swipeThreshold = 100.0,
     required this.onWordUpdated,
+    required this.onCollectionsUpdated,
     this.onGeneratingChanged,
   });
 
@@ -79,7 +84,6 @@ class _WordCardState extends State<WordCard> {
 
         final updatedWord = widget.word.copyWith(
           imageUrl: existingImageUrl,
-          updatedAt: DateTime.now(),
         );
 
         try {
@@ -118,7 +122,6 @@ Keep the entire layout clean, focused, and easy to follow.''',
 
         final updatedWord = widget.word.copyWith(
           imageUrl: imageUrl,
-          updatedAt: DateTime.now(),
         );
 
         print('Updating word in Firestore...');
@@ -176,7 +179,12 @@ Keep the entire layout clean, focused, and easy to follow.''',
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => WordDetailScreen(word: widget.word),
+            builder: (context) => WordDetailScreen(
+              word: widget.word,
+              collections: widget.collections,
+              onWordUpdated: widget.onWordUpdated,
+              onCollectionsUpdated: widget.onCollectionsUpdated,
+            ),
           ),
         );
       },
