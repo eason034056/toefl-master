@@ -5,6 +5,7 @@ import '../../providers/user_provider.dart';
 import '../../models/user.dart';
 import '../../models/word_collection.dart';
 import '../../models/word.dart';
+import '../../services/user_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+  final _userService = UserService();
 
   @override
   void dispose() {
@@ -46,28 +48,36 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) {
           final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-          // 建立一個「個別收藏單字」的單字集
-          final individualCollection = WordCollection(
-            id: 'individual',
-            name: '個別收藏單字',
-            description: '您收藏的單字集合',
-            words: [],
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+          // 從 Firestore 獲取用戶資料
+          final existingUser = await _userService.getUser(firebaseUser.uid);
 
-          // 建立使用者資料
-          final appUser = User(
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName ?? '使用者',
-            email: firebaseUser.email ?? '',
-            savedCollections: [individualCollection],
-            favoriteWordIds: [],
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+          if (existingUser != null) {
+            // 如果用戶已存在，直接使用現有資料
+            await userProvider.setUser(existingUser);
+          } else {
+            // 如果用戶不存在，建立新的用戶資料和個人收藏單字集
+            final individualCollection = WordCollection(
+              id: 'user_favorites_${firebaseUser.uid}',
+              name: '個人收藏',
+              description: '您收藏的單字集合',
+              words: [],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
 
-          await userProvider.setUser(appUser);
+            final appUser = User(
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName ?? '使用者',
+              email: firebaseUser.email ?? '',
+              savedCollections: [individualCollection],
+              favoriteWordIds: [],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+
+            await userProvider.setUser(appUser);
+          }
+
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/home');
           }

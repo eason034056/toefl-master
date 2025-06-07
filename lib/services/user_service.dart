@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart';
 import '../models/word_collection.dart';
+import '../models/word.dart';
 
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -48,7 +49,7 @@ class UserService {
 
       // 將用戶資料寫入 Firestore
       print('正在將用戶資料寫入 Firestore...');
-      await _firestore.collection('users').doc(id).set(user.toJson());
+      await _firestore.collection('users').doc(id).set(user.toFirestore());
       print('✅ 用戶資料成功寫入 Firestore');
       print('用戶資料：${user.toJson()}');
 
@@ -86,7 +87,7 @@ class UserService {
       print('用戶 ID: ${user.id}');
       print('更新資料：${user.toJson()}');
 
-      await _firestore.collection('users').doc(user.id).update(user.toJson());
+      await _firestore.collection('users').doc(user.id).update(user.toFirestore());
       print('✅ 用戶資料更新成功');
     } catch (e) {
       print('❌ 更新用戶資料失敗：$e');
@@ -101,13 +102,25 @@ class UserService {
       print('用戶 ID: $userId');
       print('單字集數量: ${collections.length}');
 
-      await _firestore.collection('users').doc(userId).update({
-        'savedCollections': collections.map((c) => c.toJson()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // 獲取當前用戶資料
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        throw Exception('找不到用戶資料');
+      }
+
+      // 更新用戶資料
+      final user = User.fromJson(userDoc.data()!);
+      final updatedUser = user.copyWith(
+        savedCollections: collections,
+        updatedAt: DateTime.now(),
+      );
+
+      // 更新 Firestore
+      await _firestore.collection('users').doc(userId).update(updatedUser.toFirestore());
       print('✅ 單字集更新成功');
     } catch (e) {
       print('❌ 更新收藏單字集失敗：$e');
+      print('錯誤詳情：${e.toString()}');
       rethrow;
     }
   }
@@ -131,19 +144,31 @@ class UserService {
   }
 
   // 更新用戶的單字學習進度
-  Future<void> updateWordProgress(String userId, Map<String, dynamic> progress) async {
+  Future<void> updateWordProgress(String userId, Map<String, UserWordProgress> progress) async {
     try {
       print('正在更新用戶的單字學習進度...');
       print('用戶 ID: $userId');
-      print('進度資料：$progress');
+      print('進度資料數量: ${progress.length}');
 
-      await _firestore.collection('users').doc(userId).update({
-        'wordProgress': progress,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // 獲取當前用戶資料
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        throw Exception('找不到用戶資料');
+      }
+
+      // 更新用戶資料
+      final user = User.fromJson(userDoc.data()!);
+      final updatedUser = user.copyWith(
+        wordProgress: progress,
+        updatedAt: DateTime.now(),
+      );
+
+      // 更新 Firestore
+      await _firestore.collection('users').doc(userId).update(updatedUser.toFirestore());
       print('✅ 學習進度更新成功');
     } catch (e) {
       print('❌ 更新單字學習進度失敗：$e');
+      print('錯誤詳情：${e.toString()}');
       rethrow;
     }
   }
@@ -190,7 +215,7 @@ class UserService {
       print('單字集 ID: ${collection.id}');
 
       await _firestore.collection('users').doc(userId).update({
-        'savedCollections': FieldValue.arrayUnion([collection.toJson()]),
+        'savedCollections': FieldValue.arrayUnion([collection.toFirestore()]),
       });
       print('✅ 單字集收藏成功');
     } catch (e) {
@@ -208,7 +233,7 @@ class UserService {
 
       final user = await getUser(userId);
       if (user != null) {
-        final updatedCollections = user.savedCollections.where((c) => c.id != collectionId).map((c) => c.toJson()).toList();
+        final updatedCollections = user.savedCollections.where((c) => c.id != collectionId).map((c) => c.toFirestore()).toList();
         await _firestore.collection('users').doc(userId).update({
           'savedCollections': updatedCollections,
         });

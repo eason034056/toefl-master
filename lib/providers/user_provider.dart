@@ -20,15 +20,13 @@ class UserProvider with ChangeNotifier {
 
   Future<void> updateUser(User updatedUser) async {
     try {
-      await _firestore.collection('users').doc(updatedUser.id).update({
-        'name': updatedUser.name,
-        'email': updatedUser.email,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // 更新 Firestore
+      await _firestore.collection('users').doc(updatedUser.id).update(updatedUser.toFirestore());
 
       _user = updatedUser;
       notifyListeners();
     } catch (e) {
+      print('❌ 更新用戶資料失敗：$e');
       throw Exception('更新用戶資料失敗：$e');
     }
   }

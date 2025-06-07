@@ -5,10 +5,12 @@ import '../../models/word.dart';
 import '../../providers/user_provider.dart';
 import 'package:provider/provider.dart';
 import 'word_list_screen.dart';
+import '../../services/user_service.dart';
+import '../../services/spaced_review_service.dart';
 
 class CollectionListScreen extends StatefulWidget {
   final List<WordCollection> collections;
-  final Function(List<WordCollection>) onCollectionsUpdated;
+  final Function(List<WordCollection>, Map<String, UserWordProgress>) onCollectionsUpdated;
   final bool isSystemCollection;
 
   const CollectionListScreen({
@@ -41,39 +43,94 @@ class _CollectionListScreenState extends State<CollectionListScreen> {
       return;
     }
 
-    print('Current user saved collections: ${user.savedCollections.length}');
-    print('Collection to toggle: ${collection.name} (${collection.id})');
+    try {
+      print('=== User Data Before Toggle ===');
+      print('User ID: ${user.id}');
+      print('Current saved collections: ${user.savedCollections.length}');
+      print('Current word progress count: ${user.wordProgress.length}');
+      print('Current updatedAt: ${user.updatedAt}');
+      print('Word progress details:');
+      user.wordProgress.forEach((wordId, progress) {
+        print('  - Word $wordId: lastReview=${progress.lastReviewDate}, nextReview=${progress.nextReviewDate}');
+      });
+      print('Collection to toggle: ${collection.id} - ${collection.name}');
+      print('Collection words count: ${collection.words.length}');
 
-    // 檢查是否已經收藏
-    final isCurrentlyFavorite = user.savedCollections.any((c) => c.id == collection.id);
-    print('Is currently favorite: $isCurrentlyFavorite');
+      // 1. 準備更新的資料
+      final isCurrentlyFavorite = user.savedCollections.any((c) => c.id == collection.id);
+      final updatedCollections = List<WordCollection>.from(user.savedCollections);
+      final updatedWordProgress = Map<String, UserWordProgress>.from(user.wordProgress);
 
-    // 創建新的收藏列表
-    final updatedCollections = List<WordCollection>.from(user.savedCollections);
+      print('Is currently favorite: $isCurrentlyFavorite');
 
-    if (isCurrentlyFavorite) {
-      print('Removing collection from favorites');
-      updatedCollections.removeWhere((c) => c.id == collection.id);
-    } else {
-      print('Adding collection to favorites');
-      updatedCollections.add(collection);
+      // 2. 更新收藏列表
+      if (isCurrentlyFavorite) {
+        updatedCollections.removeWhere((c) => c.id == collection.id);
+        // 移除相關單字的學習進度
+        for (var word in collection.words) {
+          updatedWordProgress.remove(word.id);
+        }
+        print('Removed collection and its word progress');
+      } else {
+        updatedCollections.add(collection);
+
+        // 3. 如果是新增收藏，為每個單字創建學習進度
+        final now = DateTime.now();
+        for (var i = 0; i < collection.words.length; i++) {
+          final word = collection.words[i];
+          if (!updatedWordProgress.containsKey(word.id)) {
+            final progress = SpacedReviewService.assignInitialReviewDate(
+              UserWordProgress(
+                userId: user.id,
+                wordId: word.id,
+                createdAt: now,
+                updatedAt: now,
+              ),
+              i,
+              collection.words.length,
+              5,
+            );
+            updatedWordProgress[word.id] = progress;
+          }
+        }
+        print('Added collection and initialized word progress');
+      }
+
+      // 4. 創建完整的更新用戶資料（只用於本地狀態）
+      final updatedUser = user.copyWith(
+        savedCollections: updatedCollections,
+        wordProgress: updatedWordProgress,
+        updatedAt: DateTime.now(),
+      );
+
+      print('=== User Data After Local Update ===');
+      print('Updated saved collections: ${updatedUser.savedCollections.length}');
+      print('Updated word progress count: ${updatedUser.wordProgress.length}');
+      print('Updated updatedAt: ${updatedUser.updatedAt}');
+      print('Updated word progress details:');
+      updatedUser.wordProgress.forEach((wordId, progress) {
+        print('  - Word $wordId: lastReview=${progress.lastReviewDate}, nextReview=${progress.nextReviewDate}');
+      });
+      print('Updated collections IDs: ${updatedUser.savedCollections.map((c) => c.id).join(', ')}');
+
+      // 5. 更新本地 Provider 狀態
+      await userProvider.setUser(updatedUser);
+      print('✅ Local user data updated successfully');
+
+      // 6. 通知父組件更新（傳遞 collections 和 wordProgress）
+      widget.onCollectionsUpdated(updatedCollections, updatedWordProgress);
+      print('=== End Toggle Favorite Debug ===');
+    } catch (e) {
+      print('❌ Error updating collections: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('更新收藏失敗：$e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-
-    print('Updated collections count: ${updatedCollections.length}');
-
-    // 更新用戶資料
-    final updatedUser = user.copyWith(
-      savedCollections: updatedCollections,
-    );
-
-    print('Updating user provider');
-    // 更新 Provider
-    userProvider.updateUser(updatedUser);
-
-    print('Notifying parent widget');
-    // 通知父組件更新
-    widget.onCollectionsUpdated(updatedCollections);
-    print('=== End Toggle Favorite Debug ===');
   }
 
   @override
@@ -134,7 +191,7 @@ class _CollectionListScreenState extends State<CollectionListScreen> {
                                 final updatedWords = List<Word>.from(_collections[collectionIndex].words);
                                 updatedWords[wordIndex] = updatedWord;
                                 _collections[collectionIndex] = _collections[collectionIndex].copyWith(words: updatedWords);
-                                widget.onCollectionsUpdated(_collections);
+                                widget.onCollectionsUpdated(_collections, user.wordProgress);
                               }
                             }
                           });

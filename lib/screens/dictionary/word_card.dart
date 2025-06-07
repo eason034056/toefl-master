@@ -13,7 +13,7 @@ class WordCard extends StatefulWidget {
   final double swipeThreshold;
   final List<WordCollection> collections;
   final Function(Word) onWordUpdated;
-  final Function(List<WordCollection>) onCollectionsUpdated;
+  final Function(List<WordCollection>, Map<String, UserWordProgress>) onCollectionsUpdated;
   final Function(bool)? onGeneratingChanged;
 
   const WordCard({

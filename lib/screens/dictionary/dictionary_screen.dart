@@ -240,7 +240,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     });
   }
 
-  void _onCollectionsUpdated(List<WordCollection> updatedCollections) async {
+  void _onCollectionsUpdated(List<WordCollection> updatedCollections, Map<String, UserWordProgress> updatedWordProgress) async {
     print('=== Collection Update Callback in DictionaryScreen ===');
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.user;
@@ -250,28 +250,50 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
 
     try {
-      print('Current user collections: ${user.savedCollections.length}');
-      print('Updated collections: ${updatedCollections.length}');
+      print('=== User Data Before Firestore Update ===');
+      print('User ID: ${user.id}');
+      print('Current saved collections: ${user.savedCollections.length}');
+      print('Current word progress count: ${user.wordProgress.length}');
+      print('Current updatedAt: ${user.updatedAt}');
+      print('Word progress details:');
+      user.wordProgress.forEach((wordId, progress) {
+        print('  - Word $wordId: lastReview=${progress.lastReviewDate}, nextReview=${progress.nextReviewDate}');
+      });
+      print('Updated collections count: ${updatedCollections.length}');
+      print('Updated collections IDs: ${updatedCollections.map((c) => c.id).join(', ')}');
+      print('Updated word progress count: ${updatedWordProgress.length}');
 
-      // 更新用戶收藏的單字集
-      await _userService.updateSavedCollections(user.id, updatedCollections);
+      // 1. 準備更新的用戶資料，使用更新後的 wordProgress
+      final updatedUser = user.copyWith(
+        savedCollections: updatedCollections,
+        wordProgress: updatedWordProgress, // 使用更新後的 wordProgress
+        updatedAt: DateTime.now(),
+      );
 
+      print('=== User Data After Firestore Update ===');
+      print('Updated saved collections: ${updatedUser.savedCollections.length}');
+      print('Updated word progress count: ${updatedUser.wordProgress.length}');
+      print('Updated updatedAt: ${updatedUser.updatedAt}');
+      print('Updated word progress details:');
+      updatedUser.wordProgress.forEach((wordId, progress) {
+        print('  - Word $wordId: lastReview=${progress.lastReviewDate}, nextReview=${progress.nextReviewDate}');
+      });
+      print('Updated collections IDs: ${updatedUser.savedCollections.map((c) => c.id).join(', ')}');
+
+      // 2. 使用 Provider 更新 Firestore（統一在這裡處理 Firestore 更新）
+      await userProvider.updateUser(updatedUser);
+      print('✅ User data updated successfully in Firestore');
+
+      // 3. 更新本地狀態
       setState(() {
-        // 更新 Provider 中的用戶數據
-        final updatedUser = user.copyWith(
-          savedCollections: updatedCollections,
-        );
-        userProvider.updateUser(updatedUser);
-
-        // 重新計算所有單字
         _words = _getAllWordsFromCollections([..._systemCollections, ...updatedCollections]);
         _updateTodayReviewWords();
-
-        print('Updated total words: ${_words.length}');
-        print('Updated today review words: ${_todayReviewWords.length}');
+        print('=== Local State Update ===');
+        print('Total words after update: ${_words.length}');
+        print('Today review words count: ${_todayReviewWords.length}');
       });
     } catch (e) {
-      print('Error updating collections: $e');
+      print('❌ Error updating collections: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating collections: $e')),
       );
@@ -331,7 +353,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                             MaterialPageRoute(
                               builder: (context) => CollectionListScreen(
                                 collections: _systemCollections,
-                                onCollectionsUpdated: (updatedCollections) {
+                                onCollectionsUpdated: (updatedCollections, updatedWordProgress) {
                                   print('=== Collection Update Callback ===');
                                   print('Updated collections count: ${updatedCollections.length}');
                                   // 更新用戶收藏的單字集
@@ -340,6 +362,8 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                       print('Updating user with new collections');
                                       final updatedUser = user.copyWith(
                                         savedCollections: updatedCollections,
+                                        wordProgress: updatedWordProgress,
+                                        updatedAt: DateTime.now(),
                                       );
                                       userProvider.updateUser(updatedUser);
                                       print('User updated with ${updatedCollections.length} collections');
@@ -372,13 +396,16 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                             MaterialPageRoute(
                               builder: (context) => CollectionListScreen(
                                 collections: user.savedCollections,
-                                onCollectionsUpdated: (updatedCollections) {
-                                  setState(() {
-                                    final updatedUser = user.copyWith(
-                                      savedCollections: updatedCollections,
-                                    );
-                                    userProvider.updateUser(updatedUser);
-                                  });
+                                onCollectionsUpdated: (updatedCollections, updatedWordProgress) {
+                                  if (user != null) {
+                                    setState(() {
+                                      final updatedUser = user!.copyWith(
+                                        savedCollections: updatedCollections,
+                                        wordProgress: updatedWordProgress,
+                                      );
+                                      userProvider.updateUser(updatedUser);
+                                    });
+                                  }
                                 },
                                 isSystemCollection: false,
                               ),
@@ -403,7 +430,17 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                               words: _todayReviewWords,
                               collections: _systemCollections,
                               onWordUpdated: _onWordUpdated,
-                              onCollectionsUpdated: _onCollectionsUpdated,
+                              onCollectionsUpdated: (updatedCollections, updatedWordProgress) {
+                                if (user != null) {
+                                  setState(() {
+                                    final updatedUser = user!.copyWith(
+                                      savedCollections: updatedCollections,
+                                      wordProgress: updatedWordProgress,
+                                    );
+                                    userProvider.updateUser(updatedUser);
+                                  });
+                                }
+                              },
                               title: 'Today\'s Review',
                             ),
                           ),
@@ -426,7 +463,17 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                               words: _todayLearnedWords,
                               collections: _systemCollections,
                               onWordUpdated: _onWordUpdated,
-                              onCollectionsUpdated: _onCollectionsUpdated,
+                              onCollectionsUpdated: (updatedCollections, updatedWordProgress) {
+                                if (user != null) {
+                                  setState(() {
+                                    final updatedUser = user!.copyWith(
+                                      savedCollections: updatedCollections,
+                                      wordProgress: updatedWordProgress,
+                                    );
+                                    userProvider.updateUser(updatedUser);
+                                  });
+                                }
+                              },
                               title: 'Today\'s Learned',
                             ),
                           ),

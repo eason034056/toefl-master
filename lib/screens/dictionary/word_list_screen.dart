@@ -12,7 +12,7 @@ class WordListScreen extends StatefulWidget {
   final String? title;
   final List<WordCollection> collections;
   final Function(Word) onWordUpdated;
-  final Function(List<WordCollection>) onCollectionsUpdated;
+  final Function(List<WordCollection>, Map<String, UserWordProgress>) onCollectionsUpdated;
 
   const WordListScreen({
     super.key,

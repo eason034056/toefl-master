@@ -3,12 +3,13 @@ import 'package:provider/provider.dart';
 import '../../models/word.dart';
 import '../../models/word_collection.dart';
 import '../../providers/user_provider.dart';
+import '../../services/spaced_review_service.dart';
 
 class WordDetailScreen extends StatefulWidget {
   final Word word;
   final List<WordCollection> collections;
   final Function(Word) onWordUpdated;
-  final Function(List<WordCollection>) onCollectionsUpdated;
+  final Function(List<WordCollection>, Map<String, UserWordProgress>) onCollectionsUpdated;
 
   const WordDetailScreen({
     super.key,
@@ -59,7 +60,7 @@ class _WordDetailScreenState extends State<WordDetailScreen> {
     }
   }
 
-  void _toggleFavorite() {
+  void _toggleFavorite() async {
     print('=== Toggle Favorite in WordDetail ===');
     final user = _userProvider.user;
     if (user == null) {
@@ -67,71 +68,126 @@ class _WordDetailScreenState extends State<WordDetailScreen> {
       return;
     }
 
-    print('Current saved collections: ${user.savedCollections.length}');
+    try {
+      print('User ID: ${user.id}');
+      print('Current saved collections: ${user.savedCollections.length}');
+      print('Current word progress count: ${user.wordProgress.length}');
+      print('Current updatedAt: ${user.updatedAt}');
 
-    setState(() {
-      _isFavorite = !_isFavorite;
-    });
+      // 1. 準備更新的資料
+      final updatedCollections = List<WordCollection>.from(user.savedCollections);
+      final updatedWordProgress = Map<String, UserWordProgress>.from(user.wordProgress);
 
-    // 更新用戶的收藏狀態
-    final updatedCollections = List<WordCollection>.from(user.savedCollections);
-    if (_isFavorite) {
-      print('Adding word to favorites');
-      // 找到或創建個人收藏單字集
-      var personalCollection = updatedCollections.firstWhere(
-        (collection) => collection.id == 'user_favorites',
-        orElse: () => WordCollection(
-          id: 'user_favorites',
-          name: '個人收藏',
-          description: '我收藏的單字',
-          words: [],
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      );
-
-      if (!personalCollection.words.any((word) => word.id == _word.id)) {
-        final updatedWords = List<Word>.from(personalCollection.words)..add(_word);
-        personalCollection = personalCollection.copyWith(
-          words: updatedWords,
-          updatedAt: DateTime.now(),
+      // 2. 更新收藏狀態
+      if (_isFavorite) {
+        // 移除收藏
+        // 從個人收藏單字集中移除單字
+        final personalCollection = updatedCollections.firstWhere(
+          (collection) => collection.id == 'user_favorites_${user.id}',
+          orElse: () => WordCollection(
+            id: 'user_favorites_${user.id}',
+            name: '個人收藏',
+            description: '我收藏的單字',
+            words: [],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
         );
 
-        if (!updatedCollections.any((c) => c.id == 'user_favorites')) {
-          updatedCollections.add(personalCollection);
-        } else {
-          final index = updatedCollections.indexWhere((c) => c.id == 'user_favorites');
-          updatedCollections[index] = personalCollection;
-        }
-      }
-    } else {
-      print('Removing word from favorites');
-      // 從所有收藏單字集中移除該單字
-      for (var i = 0; i < updatedCollections.length; i++) {
-        final collection = updatedCollections[i];
-        if (collection.words.any((word) => word.id == _word.id)) {
-          final updatedWords = collection.words.where((word) => word.id != _word.id).toList();
-          updatedCollections[i] = collection.copyWith(
+        if (personalCollection.words.any((word) => word.id == _word.id)) {
+          final updatedWords = personalCollection.words.where((word) => word.id != _word.id).toList();
+          final updatedCollection = personalCollection.copyWith(
             words: updatedWords,
             updatedAt: DateTime.now(),
           );
+
+          final index = updatedCollections.indexWhere((c) => c.id == 'user_favorites_${user.id}');
+          if (index != -1) {
+            updatedCollections[index] = updatedCollection;
+          }
+        }
+
+        // 移除相關單字的學習進度
+        updatedWordProgress.remove(_word.id);
+        print('Removed word from personal collection and word progress');
+      } else {
+        // 新增收藏
+        // 找到或創建個人收藏單字集
+        var personalCollection = updatedCollections.firstWhere(
+          (collection) => collection.id == 'user_favorites_${user.id}',
+          orElse: () => WordCollection(
+            id: 'user_favorites_${user.id}',
+            name: '個人收藏',
+            description: '我收藏的單字',
+            words: [],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+
+        // 如果單字不在個人收藏中，則添加
+        if (!personalCollection.words.any((word) => word.id == _word.id)) {
+          final updatedWords = List<Word>.from(personalCollection.words)..add(_word);
+          personalCollection = personalCollection.copyWith(
+            words: updatedWords,
+            updatedAt: DateTime.now(),
+          );
+
+          // 更新或添加個人收藏單字集
+          final index = updatedCollections.indexWhere((c) => c.id == 'user_favorites_${user.id}');
+          if (index != -1) {
+            updatedCollections[index] = personalCollection;
+          } else {
+            updatedCollections.add(personalCollection);
+          }
+
+          // 為單字創建學習進度
+          final now = DateTime.now();
+          final progress = SpacedReviewService.assignInitialReviewDate(
+            UserWordProgress(
+              userId: user.id,
+              wordId: _word.id,
+              createdAt: now,
+              updatedAt: now,
+            ),
+            0,
+            1,
+            5,
+          );
+          updatedWordProgress[_word.id] = progress;
+          print('Added word to personal collection and initialized word progress');
         }
       }
+
+      // 3. 更新本地狀態
+      setState(() {
+        _isFavorite = !_isFavorite;
+      });
+
+      // 4. 更新 Firestore
+      final updatedUser = user.copyWith(
+        savedCollections: updatedCollections,
+        wordProgress: updatedWordProgress,
+        updatedAt: DateTime.now(),
+      );
+      await _userProvider.updateUser(updatedUser);
+      print('✅ Firestore updated successfully');
+
+      // 5. 通知父組件
+      print('Notifying parent widget');
+      widget.onCollectionsUpdated(updatedCollections, updatedWordProgress);
+      print('=== End Toggle Favorite in WordDetail ===');
+    } catch (e) {
+      print('❌ Error toggling favorite: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('更新收藏失敗：$e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-
-    print('Updated collections count: ${updatedCollections.length}');
-
-    // 更新用戶資料
-    final updatedUser = user.copyWith(
-      savedCollections: updatedCollections,
-    );
-
-    print('Updating user provider');
-    _userProvider.updateUser(updatedUser);
-
-    print('Notifying parent widget');
-    widget.onCollectionsUpdated(updatedCollections);
-    print('=== End Toggle Favorite in WordDetail ===');
   }
 
   @override

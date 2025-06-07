@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Word {
   final String id; // 單字的唯一識別碼
   final String word; // 單字本身
@@ -87,23 +89,59 @@ class UserWordProgress {
 
   // 從 JSON 創建 UserWordProgress 物件
   factory UserWordProgress.fromJson(Map<String, dynamic> json) {
-    return UserWordProgress(
+    // 處理日期時間
+    DateTime parseDateTime(dynamic value, String fieldName) {
+      print('正在解析 $fieldName: $value (型別: ${value.runtimeType})');
+
+      if (value == null) {
+        print('$fieldName 為 null，返回 null');
+        return DateTime.now();
+      }
+
+      if (value is DateTime) {
+        print('$fieldName 已經是 DateTime 型別: $value');
+        return value;
+      } else if (value is String) {
+        try {
+          final date = DateTime.parse(value);
+          print('成功將 $fieldName 從字串轉換為日期時間: $date');
+          return date;
+        } catch (e) {
+          print('無法將 $fieldName 從字串轉換為日期時間: $e');
+          return DateTime.now();
+        }
+      } else if (value is Timestamp) {
+        final date = value.toDate();
+        print('成功將 $fieldName 從 Timestamp 轉換為日期時間: $date');
+        return date;
+      }
+
+      print('$fieldName 的型別不支援: ${value.runtimeType}');
+      return DateTime.now();
+    }
+
+    print('開始解析 UserWordProgress JSON: $json');
+
+    final progress = UserWordProgress(
       userId: json['userId'] as String,
       wordId: json['wordId'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      createdAt: parseDateTime(json['createdAt'], 'createdAt'),
+      updatedAt: parseDateTime(json['updatedAt'], 'updatedAt'),
       reviewCount: json['reviewCount'] as int? ?? 0,
       masteryLevel: (json['masteryLevel'] as num?)?.toDouble() ?? 0.0,
-      nextReviewDate: json['nextReviewDate'] != null ? DateTime.parse(json['nextReviewDate'] as String) : null,
+      nextReviewDate: json['nextReviewDate'] != null ? parseDateTime(json['nextReviewDate'], 'nextReviewDate') : null,
       isFavorite: json['isFavorite'] as bool? ?? false,
       learningStage: json['learningStage'] as int? ?? 0,
-      lastReviewDate: json['lastReviewDate'] != null ? DateTime.parse(json['lastReviewDate'] as String) : null,
+      lastReviewDate: json['lastReviewDate'] != null ? parseDateTime(json['lastReviewDate'], 'lastReviewDate') : null,
     );
+
+    print('解析完成，nextReviewDate: ${progress.nextReviewDate}');
+    return progress;
   }
 
-  // 轉換為 JSON
+  // 轉換為 JSON（用於本地存儲）
   Map<String, dynamic> toJson() {
-    return {
+    final json = {
       'userId': userId,
       'wordId': wordId,
       'createdAt': createdAt.toIso8601String(),
@@ -115,6 +153,26 @@ class UserWordProgress {
       'learningStage': learningStage,
       'lastReviewDate': lastReviewDate?.toIso8601String(),
     };
+    print('轉換為 JSON: $json');
+    return json;
+  }
+
+  // 轉換為 Firestore 格式
+  Map<String, dynamic> toFirestore() {
+    final json = {
+      'userId': userId,
+      'wordId': wordId,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+      'reviewCount': reviewCount,
+      'masteryLevel': masteryLevel,
+      'nextReviewDate': nextReviewDate != null ? Timestamp.fromDate(nextReviewDate!) : null,
+      'isFavorite': isFavorite,
+      'learningStage': learningStage,
+      'lastReviewDate': lastReviewDate != null ? Timestamp.fromDate(lastReviewDate!) : null,
+    };
+    print('轉換為 Firestore 格式: $json');
+    return json;
   }
 
   // 複製並修改 UserWordProgress 物件
